@@ -1,0 +1,8 @@
+.env
+.env.*
+*.env
+state.json
+*_sheets.json
+__pycache__/
+*.pyc
+.venv/
