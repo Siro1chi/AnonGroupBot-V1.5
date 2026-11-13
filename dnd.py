@@ -487,10 +487,9 @@ async def handle_sheet(message: Message):
     uid = message.from_user.id
     ctx = _dnd_ctx(uid)
     if not ctx:
-        await message.answer("❌ Анкеты доступны только в DND-комнате")
         return
     rid, room = ctx
-
+    
     parts = message.text.split(maxsplit=1)
     if len(parts) == 1:
         target_uid = uid
