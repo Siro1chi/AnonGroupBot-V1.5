@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import re
+import logging
 from typing import Optional
 
 from aiogram import F, Router
@@ -87,6 +88,8 @@ def _is_gm(user_id: int, room: dict) -> bool:
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
+    
+    # Сбрасываем кнопку мини-аппа
     try:
         await message.bot.set_chat_menu_button(
             chat_id=message.chat.id, 
@@ -94,7 +97,8 @@ async def cmd_start(message: Message, state: FSMContext):
         )
     except Exception as e:
         logging.error(f"Не удалось сбросить кнопку меню: {e}")
-async def cmd_start(message: Message, state: FSMContext):
+
+    # Отправляем приветствие (объединено в одну функцию)
     await message.answer(
         "👋 <b>AnonGroupBot</b>\n\n"
         "Telegram-личность скрыта всегда. Виден только ник и символ.\n\n"
@@ -102,7 +106,6 @@ async def cmd_start(message: Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=main_menu_kb(),
     )
-
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message, state: FSMContext):
