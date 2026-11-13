@@ -18,14 +18,14 @@ from aiogram.types import (
     Message,
 )
 
+
 import storage
 from storage import (
     rooms, user_room, global_names,
     get_identity, format_nick, parse_nick_arg, is_nick_allowed,
     has_global_name, find_room_by_name, make_room, new_room_id,
-    verify_password, hash_password,
+    verify_password, hash_password, ensure_card  # <--- Добавили ensure_card
 )
-
 router = Router(name="handlers")
 
 MAX_NAME_LEN = 30
@@ -42,6 +42,11 @@ class CreateRoomFSM(StatesGroup):
     waiting_password = State()
     waiting_name = State()
 
+class EditCardFSM(StatesGroup):
+    waiting_name = State()
+    waiting_age = State()
+    waiting_text = State()
+    waiting_photo = State()
 
 # ---------- Хелперы ----------
 
@@ -643,6 +648,122 @@ async def _forward_message(source: Message, target_id: int, nick: str, use_forma
     elif source.video_note:
         await bot.send_message(target_id, f"{prefix} [видеосообщение]", parse_mode="HTML")
         await bot.send_video_note(target_id, source.video_note.file_id)
+
+# ---------- RP Карточки ----------
+
+def _format_card(card: dict, nick: str) -> str:
+    lines = [f"🪪 <b>Карточка: {html.escape(nick)}</b>", ""]
+    if card.get("name"):
+        lines.append(f"👤 <b>Имя:</b> {html.escape(card['name'])}")
+    if card.get("age"):
+        lines.append(f"🎂 <b>Возраст:</b> {html.escape(card['age'])}")
+    if card.get("text"):
+        lines.append(f"\n📝 {html.escape(card['text'])}")
+    if not any([card.get("name"), card.get("age"), card.get("text")]):
+        lines.append("<i>Карточка пока пуста.</i>")
+    return "\n".join(lines)
+
+@router.message(Command("card"))
+async def cmd_card(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    ctx = _ctx(uid)
+    if not ctx:
+        await message.answer("❌ Вы не в комнате")
+        return
+    rid, room = ctx
+    if room["type"] != "roleplay":
+        await message.answer("❌ Карточки доступны только в Roleplay-комнатах")
+        return
+
+    await state.set_state(EditCardFSM.waiting_name)
+    await state.update_data(rid=rid)
+    await message.answer(
+        "📝 <b>Редактирование карточки</b>\n\n"
+        "Введите ваше <b>имя персонажа</b> (или отправьте «-», чтобы пропустить):",
+        parse_mode="HTML"
+    )
+
+@router.message(EditCardFSM.waiting_name)
+async def card_name(message: Message, state: FSMContext):
+    data = await state.get_data()
+    card = ensure_card(data["rid"], message.from_user.id)
+    if message.text.strip() != "-":
+        card["name"] = message.text.strip()
+    
+    await state.set_state(EditCardFSM.waiting_age)
+    await message.answer("Введите <b>возраст</b> (или «-»):", parse_mode="HTML")
+
+@router.message(EditCardFSM.waiting_age)
+async def card_age(message: Message, state: FSMContext):
+    data = await state.get_data()
+    card = ensure_card(data["rid"], message.from_user.id)
+    if message.text.strip() != "-":
+        card["age"] = message.text.strip()
+    
+    await state.set_state(EditCardFSM.waiting_text)
+    await message.answer("Введите <b>описание</b> (или «-»):", parse_mode="HTML")
+
+@router.message(EditCardFSM.waiting_text)
+async def card_text(message: Message, state: FSMContext):
+    data = await state.get_data()
+    card = ensure_card(data["rid"], message.from_user.id)
+    if message.text.strip() != "-":
+        card["text"] = message.text.strip()
+    
+    await state.set_state(EditCardFSM.waiting_photo)
+    await message.answer("Отправьте <b>фото</b> (или «-», чтобы пропустить):", parse_mode="HTML")
+
+@router.message(EditCardFSM.waiting_photo, F.photo | F.text)
+async def card_photo(message: Message, state: FSMContext):
+    data = await state.get_data()
+    card = ensure_card(data["rid"], message.from_user.id)
+    
+    if message.photo:
+        card["photo_file_id"] = message.photo[-1].file_id
+    elif message.text and message.text.strip() == "-":
+        pass
+    else:
+        await message.answer("Пожалуйста, отправьте фото или «-».")
+        return
+
+    await state.clear()
+    
+    name, sym = get_identity(message.from_user.id, data["rid"])
+    nick = format_nick(name, sym)
+    
+    if card.get("photo_file_id"):
+        await message.answer_photo(card["photo_file_id"], caption=_format_card(card, nick), parse_mode="HTML")
+    else:
+        await message.answer(_format_card(card, nick), parse_mode="HTML")
+
+
+@router.message(Command("sheet"))
+async def handle_sheet_rp(message: Message):
+    uid = message.from_user.id
+    ctx = _ctx(uid)
+    if not ctx:
+        return
+    rid, room = ctx
+    if room["type"] != "roleplay":
+        return  # Если это Regular или DND, просто игнорируем
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) == 1:
+        target_uid = uid
+        card = ensure_card(rid, uid)
+        name, sym = get_identity(uid, rid)
+        target_nick = format_nick(name, sym)
+    else:
+        target_uid, target_nick = parse_nick_arg(parts[1].strip(), rid)
+        if target_uid is None:
+            await message.answer(f"❌ {target_nick}")
+            return
+        card = ensure_card(rid, target_uid)
+
+    if card.get("photo_file_id"):
+        await message.answer_photo(card["photo_file_id"], caption=_format_card(card, target_nick), parse_mode="HTML")
+    else:
+        await message.answer(_format_card(card, target_nick), parse_mode="HTML")
 
 
 # ---------- Шёпот ----------
