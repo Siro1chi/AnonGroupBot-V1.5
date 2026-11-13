@@ -248,3 +248,22 @@ async def autosave_loop() -> None:
                     logger.error(f"autosave: {info}")
         except Exception as e:
             logger.exception(f"autosave_loop: {e}")
+
+# ---------- RP-карточки ----------
+
+def new_card() -> dict:
+    return {
+        "name": "",
+        "age": "",
+        "text": "",
+        "photo_file_id": None
+    }
+
+def ensure_card(room_id: str, user_id: int) -> dict:
+    room = rooms.get(room_id)
+    if not room:
+        return new_card()
+    if user_id not in room["cards"]:
+        room["cards"][user_id] = new_card()
+        mark_dirty(room_id)
+    return room["cards"][user_id]
