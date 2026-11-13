@@ -9,6 +9,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import Message, MenuButtonDefault
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
@@ -86,6 +87,14 @@ def _is_gm(user_id: int, room: dict) -> bool:
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
+    try:
+        await message.bot.set_chat_menu_button(
+            chat_id=message.chat.id, 
+            menu_button=MenuButtonDefault()
+        )
+    except Exception as e:
+        logging.error(f"Не удалось сбросить кнопку меню: {e}")
+async def cmd_start(message: Message, state: FSMContext):
     await message.answer(
         "👋 <b>AnonGroupBot</b>\n\n"
         "Telegram-личность скрыта всегда. Виден только ник и символ.\n\n"
